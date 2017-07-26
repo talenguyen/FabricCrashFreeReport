@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 const fetch = require('node-fetch');
-const fs = require('fs-extra')
+const fs = require('fs-extra');
 
 const HOST = 'https://api-dash.fabric.io';
 const HEADER = {
   'Content-Type': 'application/json',
   'Authorization': 'Bearer 2210a15a8f8fe1b6b76449dda09b0f92e0bba6bf30d726e98b14290fc83e5589'
 };
+const APP_ID = '54c7cd5765d38069d000000e';
+
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 Date.prototype.getUnixTime = function() {
@@ -27,17 +29,11 @@ function dateDiffInDays(a, b) {
   return Math.floor((utc2 - utc1) / MS_PER_DAY);
 }
 
-function increaseDateByOne(date) {
-  const cloneDate = new Date(date);
-  cloneDate.setDate(date.getDate() + 1);
-  return new Date(cloneDate);
-}
-
 function getAppScalars(date) {
   const body = {
-    query: 'query AppScalars($externalId_0:String!,$type_1:IssueType!,$start_2:UnixTimestamp!,$end_3:UnixTimestamp!,$filters_4:IssueFiltersType!) {project(externalId:$externalId_0) {crashlytics {_scalars2g2FGL:scalars(synthesizedBuildVersions:[],type:$type_1,start:$start_2,end:$end_3,filters:$filters_4) {crashes,issues,impactedDevices}},id}}',
+    query: 'query AppScalars($externalId_0:String!,$type_1:IssueType!,$start_2:UnixTimestamp!,$end_3:UnixTimestamp!,$filters_4:IssueFiltersType!) {project(externalId:$externalId_0) {crashlytics {scalars:scalars(synthesizedBuildVersions:[],type:$type_1,start:$start_2,end:$end_3,filters:$filters_4) {crashes,issues,impactedDevices}},id}}',
     variables: {
-      externalId_0: '54c7cd5765d38069d000000e',
+      externalId_0: APP_ID,
       type_1: 'crash',
       start_2: startTime(date),
       end_3: endTime(date),
@@ -54,23 +50,15 @@ function getAppScalars(date) {
     })
     .then(res => res.json())
     .then((json) => {
-      return json.data.project.crashlytics;
-    })
-    .then((crashlytics) => {
-      return Object.keys(crashlytics)
-        .filter(key => key.includes('scalars'))
-        .map(key => crashlytics[ key ])[ 0 ];
-    })
-    .then(scalars => {
-      return scalars;
+      return json.data.project.crashlytics.scalars;
     });
 }
 
 function getSessionAndUserMetrics(date) {
   const body = {
-    query: 'query SessionAndUserMetrics($externalId_0:String!,$start_1:UnixTimestamp!,$end_2:UnixTimestamp!) {project(externalId:$externalId_0) {answers {_totalSessionsForBuilds2aVUKC:totalSessionsForBuilds(synthesizedBuildVersions:["all"],start:$start_1,end:$end_2) {synthesizedBuildVersion,values {timestamp,value}},_dauByBuilds5Cgqs:dauByBuilds(builds:["all"],start:$start_1,end:$end_2) {scalar,values {timestamp,value}}},id}}',
+    query: 'query SessionAndUserMetrics($externalId_0:String!,$start_1:UnixTimestamp!,$end_2:UnixTimestamp!) {project(externalId:$externalId_0) {answers {sessions:totalSessionsForBuilds(synthesizedBuildVersions:["all"],start:$start_1,end:$end_2) {synthesizedBuildVersion,values {timestamp,value}},users:dauByBuilds(builds:["all"],start:$start_1,end:$end_2) {scalar,values {timestamp,value}}},id}}',
     variables: {
-      externalId_0: '54c7cd5765d38069d000000e',
+      externalId_0: APP_ID,
       start_1: startTime(date),
       end_2: endTime(date)
     }
@@ -88,42 +76,12 @@ function getSessionAndUserMetrics(date) {
       return json.data.project.answers;
     })
     .then((answers) => {
-      return Object.keys(answers)
-        .filter(key => key.includes('totalSessions') || key.includes('ByBuild'))
-        .map((key) => {
-          const answer = answers[ key ];
-          if (key.includes('totalSessions')) {
-            return {
-              sessions: {
-                value: answer[ 0 ].values[ 0 ].value
-              }
-            }
-          } else {
-            return {
-              users: {
-                value: answer.values[ 0 ].value
-              }
-            }
-          }
-
-        });
-    })
-    .then(arr => {
-      const users = arr
-        .filter(o => !!o.users)
-        .map(o => o.users)[ 0 ];
-
-      const sessions = arr
-        .filter(o => !!o.sessions)
-        .map(o => o.sessions)[ 0 ];
-
+      const session = answers.sessions[ 0 ];
+      const users = answers.users;
       return {
-        sessions: sessions.value,
-        users: users.value
+        sessions: session.values[0].value,
+        users: users.values[0].value
       };
-    })
-    .then(values => {
-      return values;
     });
 }
 
@@ -157,7 +115,7 @@ function fetchCrashFreeForDate(date) {
     });
 }
 
-const startDate = new Date('2017-4-27');
+const startDate = new Date('2017-7-26');
 const endDate = new Date();
 
 const dateRange = (startDate, endDate) => {
